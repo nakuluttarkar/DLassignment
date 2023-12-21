@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:pPr><w:pStyle w:val="title"/><w:jc w:val="left"/></w:pPr><w:r><w:t>Demo</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="heading"/><w:jc w:val="left"/></w:pPr><w:r><w:t>Direction of Arrival Estimation with a Uniform Linear Array in Compressed Beamforming Application.</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="text"/><w:jc w:val="left"/></w:pPr><w:r><w:t></w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="text"/><w:jc w:val="left"/></w:pPr><w:r><w:t>This is a simple demo on how to use </w:t></w:r><w:r><w:rPr><w:i/><w:rFonts w:cs="monospace"/></w:rPr><w:t>saen-clarsen MATLAB package</w:t></w:r><w:r><w:t> in compressed beamforming (CBF) for single-snapshot direction of arrival (DoA) estimation. It can be done by following steps.</w:t></w:r></w:p><w:p><w:pPr><w:sectPr/></w:pPr></w:p><w:p><w:pPr><w:pStyle w:val="text"/><w:jc w:val="left"/></w:pPr><w:r><w:t>Firstly, generate the design matrix (i.e., dictionary) </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>X</w:t></w:r><w:r><w:t> for </w:t></w:r><w:r><w:rPr><w:rFonts w:cs="monospace"/></w:rPr><w:t>"p"</w:t></w:r><w:r><w:t> possible look directions (angles) using a uniform linear array (ULA) composed of </w:t></w:r><w:r><w:rPr><w:rFonts w:cs="monospace"/></w:rPr><w:t>"n"</w:t></w:r><w:r><w:t> sensor elements. The ULA has an inter-element spacing of half a wavelength.</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="code"/></w:pPr><w:r><w:t><![CDATA[% Code by Muhammad Naveed Tabassum and Esa Ollila, Aalto University. <2018>
+clearvars;  close all hidden;   clc;
+rng(920)
+p = 30; % possible look directions       
+n = 10; % #of Sensors in ULA
+TH_deg = 180*(0:p-1)/p - 90;   
+X = (1/sqrt(n)) * exp( 1i*pi*(0:n-1)'*sin(deg2rad(TH_deg)) );
+sdX = sqrt( sum(X.*conj(X)) );
+X = bsxfun(@rdivide, X, sdX);
+]]></w:t></w:r></w:p><w:p><w:pPr><w:sectPr/></w:pPr></w:p><w:p><w:pPr><w:pStyle w:val="text"/><w:jc w:val="left"/></w:pPr><w:r><w:t>At ULA, record a snapshot of </w:t></w:r><w:r><w:rPr><w:i/><w:rFonts w:cs="monospace"/></w:rPr><w:t>noisy observations</w:t></w:r><w:r><w:t> as a vector </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>y </w:t></w:r><w:r><w:t>for the wavefield incident on the ULA. This can be done for </w:t></w:r><w:r><w:rPr><w:rFonts w:cs="monospace"/></w:rPr><w:t>"K"</w:t></w:r><w:r><w:t> sources having some random powers and DoAs, as:</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="code"/></w:pPr><w:r><w:t><![CDATA[K = 3;
+srcPow = 0.4 + 0.6*rand(K,1);       srcPow = round(srcPow/max(srcPow),1);
+srcLoc = TH_deg(randperm(p,K));
+sigVar = sum(srcPow.^2) / K; % signal variance = average source power = (|s1|^2+|s2|^2+...+|sK|^2)/K
+SNRdB = 20;
+noiseVar = 10^(-0.1*SNRdB)*sigVar; % noise variance based on SNR-level in dB.
+
+[~, srcIndx] = ismember(srcLoc, TH_deg);
+Xs = X(:,srcIndx);
+srcTrueK = srcPow.*exp(1i*unifrnd(0,2*pi, [K 1])); 	% signal = |s|exp(j*U(0,2*pi))
+cscg_noise = sqrt(noiseVar/2)*(randn(n, 1) + 1i*randn(n, 1));	% circularly symmetric complex gaussian (CSCG) noise
+y = Xs*srcTrueK + cscg_noise;  % Noisy observations
+srcTruth = zeros(p,1);
+srcTruth(srcIndx) = srcTrueK; % Underlying true model in complex domain
+]]></w:t></w:r></w:p><w:p><w:pPr><w:sectPr/></w:pPr></w:p><w:p><w:pPr><w:pStyle w:val="text"/><w:jc w:val="left"/></w:pPr><w:r><w:t>Next, the SAEN approach estimates the DoAs using c-PW-WEN and c-LARS-WLasso algorithms. </w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="code"/></w:pPr><w:r><w:t><![CDATA[m = 10;
+AL = linspace(1,1e-1, m);  % Grid of elastic net tunning parameter with 'm' values.
+tic
+[betaK] = saen(y,X,K,AL);
+elapsedTime = toc
+
+% Plotting
+clf, figure(1);
+srcTruth(srcTruth==0) = nan;    betaK(betaK==0) = nan;
+stem(TH_deg, abs(srcTruth),'-.r^');     hold on;
+stem(TH_deg, abs(betaK),'--bv');        hold off;
+axis([-90,90, 0,1.3]);
+xlabel('Broadside Angle (degrees)');    ylabel('Power');
+title('DoAs Estimate')
+legend('Ground Truth', 'SAEN Estimate');]]></w:t></w:r></w:p></w:body></w:document>
